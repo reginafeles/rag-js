@@ -11,18 +11,6 @@ documents = [
     "Flask - легковесный фреймворк для веб-приложений."
 ]
 
-# Делаем документы .txt в папке data
-os.mkdir("data")
-
-with open ("data/ML.txt", 'w') as f:
-    f.write(documents[0])
-
-with open ("data/Python.txt", 'w') as f:
-    f.write(documents[1])
-
-with open ("data/Flask.txt", 'w') as f:
-    f.write(documents[2])
-
 def simple_search(query):
     """Простой поиск по документам"""
     results = []
@@ -32,7 +20,7 @@ def simple_search(query):
     return results
 
 def ask_question():
-    question = input("Введите запрос:") # Задача 2: получать запрос из консоли (получили)
+    question = None # Задача 2: получать запрос из консоли 
     
     # 1. Поиск по документам
     relevant_docs = simple_search(question)
@@ -59,6 +47,6 @@ def ask_question():
         answer = "Ошибка подключения к AI"
     
     return answer
-    
+
 if __name__ == '__main__':
     ask_question()
