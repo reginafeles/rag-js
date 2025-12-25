@@ -1,52 +1,61 @@
-import # библиотеки для работы с LLM, например, Groq
-import os
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+
+from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+import os
 
-load_dotenv()  # Загружает API ключ из .env файла
+load_dotenv()
+from model.model import RAG
 
-# Простейший набор документов. Задача 1: сделать из этого *.csv и или *.txt и загружать из папки data
-documents = [
-    "Машинное обучение - это метод искусственного интеллекта.",
-    "Python популярный язык для Data Science.",
-    "Flask - легковесный фреймворк для веб-приложений."
-]
+app = FastAPI(title="JavaScript Chat")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-def simple_search(query):
-    """Простой поиск по документам"""
-    results = []
-    for doc in documents:
-        if query.lower() in doc.lower():
-            results.append(doc)
-    return results
+try:
+    rag = RAG()
+except Exception as e:
+    print("Блин, что-то опять упало((( моя самооценка:", e)
+    rag = None
 
-def ask_question():
-    question = None # Задача 2: получать запрос из консоли 
-    
-    # 1. Поиск по документам
-    relevant_docs = simple_search(question)
-    context = "\n".join(relevant_docs)
-    
-    # 2. Генерация ответа с контекстом
-    prompt = f"""
-    Контекст: {context}
-    
-    Вопрос: {question}
-    
-    Ответь на вопрос на основе контекста. Если в контексте нет информации, скажи "Не знаю".
-    """
-    
+
+
+class ChatRequest(BaseModel):
+    messages: list[dict[str, str]]
+
+@app.get("/", response_class=HTMLResponse)
+async def serve_frontend():
     try:
-        # Задача 3: заменить запрос к OpenAI на запрос к Groq; внимательно изучаем доку
-        response = openai.ChatCompletion.create(
-            model="gpt-3.5-turbo",
-            messages=[{"role": "user", "content": prompt}],
-            api_key=os.getenv('OPENAI_API_KEY') # Здесь меняем на ключик Groq
-        )
-        answer = response.choices[0].message.content
-    except:
-        answer = "Ошибка подключения к AI"
-    
-    return answer
+        with open("templates/index.html", "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Файл index.html не найден")
 
-if __name__ == '__main__':
-    ask_question()
+
+@app.post("/chat")
+def chat(request: ChatRequest):
+    if rag is None:
+        raise HTTPException(status_code=500, detail="RAG caput")
+
+    try:
+        last_user_message = None
+        for msg in reversed(request.messages):
+            if msg["role"] == "user":
+                last_user_message = msg["content"]
+                break
+
+        if not last_user_message:
+            raise HTTPException(status_code=400, detail="No user message")
+
+        answer = rag.ask_with_history(request.messages, last_user_message)
+        return {"answer": answer}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"RAG Error: {str(e)}")
