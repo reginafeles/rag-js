@@ -36,7 +36,7 @@ form.addEventListener("submit", async (e) => {
 
         const botMsg = document.createElement("div");
         botMsg.classList.add("message", "bot");
-        botMsg.innerText = data.answer;
+        botMsg.innerHTML = marked.parse(data.answer);
         messagesDiv.appendChild(botMsg);
         messagesDiv.scrollTop = messagesDiv.scrollHeight;
 
