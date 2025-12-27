@@ -1,60 +1,61 @@
-from groq import Groq
-import os
-import glob
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import HTMLResponse
+from fastapi.staticfiles import StaticFiles
+
+from pydantic import BaseModel
+from fastapi.middleware.cors import CORSMiddleware
 from dotenv import load_dotenv
+import os
 
-load_dotenv()  # Загружает API ключ из .env
+load_dotenv()
+from model.model import RAG
 
-def load_documents(data_dir: str = "data"):
-    docs = []
+app = FastAPI(title="JavaScript Chat")
+app.mount("/static", StaticFiles(directory="static"), name="static")
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    for path in glob.glob(os.path.join(data_dir, "**", "*.txt"), recursive=True):
-        with open(path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    docs.append(line)
+try:
+    rag = RAG()
+except Exception as e:
+    print("Блин, что-то опять упало((( моя самооценка:", e)
+    rag = None
 
-    return docs
 
-def simple_search(query, docs):
-    q = (query or "").lower()
-    return [doc for doc in docs if q in doc.lower()]
 
-def ask_question():
-    question = input("Введи запрос:\n").strip() # Задача 2: получать запрос из консоли 
+class ChatRequest(BaseModel):
+    messages: list[dict[str, str]]
 
-    documents = load_documents("data")
-
-    # 1. Поиск по документам
-    relevant_docs = simple_search(question, documents)
-    context = "\n".join(relevant_docs)
-    
-    # 2. Генерация ответа с контекстом
-    prompt = f"""
-    Контекст: {context}
-    
-    Вопрос: {question}
-    
-    Ответь на вопрос на основе контекста. Если в контексте нет информации, скажи "Не знаю".
-    """
-    
+@app.get("/", response_class=HTMLResponse)
+async def serve_frontend():
     try:
-        client = Groq(
-            api_key=os.environ.get("GROQ_API_KEY"),
-        )
+        with open("templates/index.html", "r", encoding="utf-8") as f:
+            return f.read()
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Файл index.html не найден")
 
-        chat_completion = client.chat.completions.create(
-            messages=[{"role": "user", "content": prompt}],
-            model="llama-3.3-70b-versatile",
-        )
 
-        answer = chat_completion.choices[0].message.content
-    except:
-        answer = "Ошибка подключения к AI"
-    
-    print(answer)
-    return answer
+@app.post("/chat")
+def chat(request: ChatRequest):
+    if rag is None:
+        raise HTTPException(status_code=500, detail="RAG caput")
 
-if __name__ == '__main__':
-    ask_question()
+    try:
+        last_user_message = None
+        for msg in reversed(request.messages):
+            if msg["role"] == "user":
+                last_user_message = msg["content"]
+                break
+
+        if not last_user_message:
+            raise HTTPException(status_code=400, detail="No user message")
+
+        answer = rag.ask_with_history(request.messages, last_user_message)
+        return {"answer": answer}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"RAG Error: {str(e)}")
