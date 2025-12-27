@@ -1,9 +1,28 @@
 const messagesDiv = document.getElementById("messages");
 const form = document.getElementById("inputForm");
 const input = document.getElementById("queryInput");
+const themeBtn = document.getElementById("themeToggle");
 
 let chatHistory = [];
 
+/* ====== ТЕМА ====== */
+function applyTheme(theme) {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("theme", theme);
+    themeBtn.textContent = theme === "dark" ? "☀️" : "🌙";
+}
+
+if (themeBtn) {
+    const saved = localStorage.getItem("theme") || "light";
+    applyTheme(saved);
+
+    themeBtn.addEventListener("click", () => {
+        const current = document.documentElement.getAttribute("data-theme");
+        applyTheme(current === "dark" ? "light" : "dark");
+    });
+}
+
+/* ====== ЧАТ ====== */
 form.addEventListener("submit", async (e) => {
     e.preventDefault();
     const text = input.value.trim();
@@ -19,18 +38,11 @@ form.addEventListener("submit", async (e) => {
     input.value = "";
 
     try {
-        const resp = await fetch("http://127.0.0.1:8000/chat", {
+        const resp = await fetch("/chat", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ messages: chatHistory })
         });
-
-        if (!resp.ok) {
-            const errorText = await resp.text();
-            console.error("Server Error:", errorText);
-            alert("Error: " + errorText);
-            return;
-        }
 
         const data = await resp.json();
 
